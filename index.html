@@ -1,92 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Owner Inbox — Chat</title>
-
-  <!-- Tailwind CDN (quick) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Custom styles -->
-  <link rel="stylesheet" href="./styles.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Private Messaging App</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center p-6">
+<body class="bg-gray-100 flex items-center justify-center p-4">
 
-  <div id="app" class="bg-white rounded-2xl shadow-2xl w-full max-w-6xl overflow-hidden flex flex-col md:flex-row h-[90vh]">
+<div id="app" class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col md:flex-row h-[90vh]">
 
-    <!-- Left (Conversation list) -->
-    <div id="main-ui" class="hidden flex-1 md:flex md:flex-row h-full">
-      <aside id="conversation-list-pane" class="w-full md:w-1/3 border-r border-gray-200 bg-gray-50 flex flex-col">
-        <div class="p-6 bg-indigo-600 text-white">
-          <h2 class="text-xl font-bold">Conversations</h2>
-          <p id="owner-id-display" class="text-sm text-indigo-200 mt-1">Your ID: <span id="ownerIdSpan" class="font-mono"></span></p>
+    <!-- Main UI -->
+    <div id="main-ui" class="flex-1 flex flex-col md:flex-row h-full hidden">
+        <!-- Left Pane: Conversation List -->
+        <div id="conversation-list-pane" class="w-full md:w-1/3 flex flex-col border-r border-gray-200 bg-gray-50 flex-shrink-0">
+            <div class="p-6 bg-indigo-600 text-white flex-shrink-0">
+                <h2 class="text-xl font-bold">Conversations</h2>
+                <p id="owner-id-display" class="text-sm text-indigo-200 mt-1">Owner ID: <span class="font-mono" id="ownerIdSpan"></span></p>
+            </div>
+            <ul id="conversationList" class="flex-grow overflow-y-auto space-y-2 p-4">
+                <li class="p-3 text-sm text-gray-500">No conversations yet.</li>
+            </ul>
         </div>
 
-        <div class="p-4 flex items-center space-x-2">
-          <input id="searchConv" type="search" placeholder="Search..." class="flex-grow p-2 rounded-lg border border-gray-200 text-sm" />
-          <button id="createPrivateBtn" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">+ Private</button>
-        </div>
+        <!-- Right Pane: Chat View -->
+        <div id="chat-pane" class="flex-1 flex flex-col h-full hidden">
+            <div id="chat-header" class="p-4 bg-gray-100 border-b border-gray-200 flex-shrink-0">
+                <h3 class="text-lg font-bold text-gray-800">Select a Conversation</h3>
+            </div>
 
-        <ul id="conversationList" class="flex-grow overflow-y-auto space-y-3 p-4">
-          <li class="p-3 text-sm text-gray-500">No conversations yet.</li>
-        </ul>
-      </aside>
+            <div id="chat-view" class="flex-grow overflow-y-auto p-6 space-y-4 chat-container">
+            </div>
 
-      <!-- Chat view -->
-      <main id="chat-pane" class="flex-1 flex flex-col h-full hidden">
-        <div id="chat-header" class="p-4 bg-gray-100 border-b border-gray-200">
-          <h3 id="chatTitle" class="text-lg font-bold text-gray-800">Select a conversation</h3>
+            <div id="chat-input" class="p-4 bg-white border-t border-gray-200 flex-shrink-0">
+                <div class="flex items-end space-x-2">
+                    <textarea id="messageInput" class="flex-grow border border-gray-300 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none h-12 transition-all duration-200" placeholder="Type a message..."></textarea>
+                    <button id="sendMessageButton" class="bg-indigo-600 text-white rounded-xl p-3 font-semibold hover:bg-indigo-700 transition-colors duration-200 shadow-md">
+                        Send
+                    </button>
+                </div>
+            </div>
         </div>
-
-        <div id="chat-view" class="flex-grow overflow-y-auto p-6 space-y-4 chat-container">
-          <!-- messages injected here -->
-        </div>
-
-        <div id="chat-input" class="p-4 bg-white border-t border-gray-200">
-          <div class="flex items-end space-x-2">
-            <textarea id="messageInput" rows="1" placeholder="Type a message..." class="flex-grow border border-gray-300 rounded-xl p-3 text-sm focus:outline-none resize-none h-12"></textarea>
-            <button id="sendMessageButton" class="bg-indigo-600 text-white rounded-xl p-3 font-semibold hover:bg-indigo-700">Send</button>
-          </div>
-        </div>
-      </main>
     </div>
 
     <!-- Initial Setup Modal -->
-    <div id="setup-modal" class="fixed inset-0 bg-gray-900/60 flex items-center justify-center p-4 z-50">
-      <div class="bg-white rounded-2xl p-8 shadow-2xl w-full max-w-lg">
-        <h2 class="text-3xl font-bold text-center text-gray-800">Welcome</h2>
-        <p class="text-center text-gray-600 mt-2">Tell us who you are to get started.</p>
+    <div id="setup-modal" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl p-8 shadow-2xl w-full max-w-lg">
+            <h2 class="text-3xl font-bold text-center text-gray-800">Welcome</h2>
+            <p class="text-center text-gray-600 mt-2">Choose how you want to access the chat.</p>
 
-        <div class="mt-6 space-y-4">
-          <div>
-            <label for="nicknameInput" class="block text-sm font-medium text-gray-700">Your Nickname</label>
-            <input id="nicknameInput" type="text" class="mt-1 block w-full rounded-md border-gray-300 p-2.5 text-sm" placeholder="e.g., Jane Doe" />
-          </div>
-
-          <div>
-            <div class="flex items-center justify-between">
-              <label for="ownerIdInput" class="block text-sm font-medium text-gray-700">Owner's ID (optional)</label>
-              <span id="ownerHint" class="text-xs text-gray-500">Leave empty to contact the app owner</span>
+            <div class="mt-6 space-y-4 flex flex-col">
+                <button id="ownerLoginBtn" class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-xl shadow-md hover:bg-indigo-700 transition-colors duration-200">
+                    Login as Owner
+                </button>
+                <button id="guestLoginBtn" class="w-full bg-gray-200 text-gray-800 font-semibold py-3 rounded-xl shadow-md hover:bg-gray-300 transition-colors duration-200">
+                    Chat as Guest
+                </button>
             </div>
-            <input id="ownerIdInput" type="text" class="mt-1 block w-full rounded-md border-gray-300 p-2.5 text-sm" placeholder="Paste the Owner's ID (if you have it)" />
-          </div>
 
-          <div class="flex items-center gap-2">
-            <input id="isFriendCheckbox" type="checkbox" class="h-4 w-4" />
-            <label for="isFriendCheckbox" class="text-sm text-gray-700">I'm the owner's friend (private conversation)</label>
-          </div>
-        </div>
+            <!-- Owner Login Form -->
+            <div id="ownerLoginForm" class="mt-6 space-y-4 hidden">
+                <input type="email" id="ownerEmail" class="w-full border rounded-md p-2.5 text-sm" placeholder="Owner Email">
+                <input type="password" id="ownerPassword" class="w-full border rounded-md p-2.5 text-sm" placeholder="Password">
+                <button id="ownerLoginSubmit" class="w-full bg-indigo-600 text-white py-3 rounded-xl shadow-md hover:bg-indigo-700 transition-colors duration-200">
+                    Login
+                </button>
+            </div>
 
-        <div class="mt-6">
-          <button id="startChatButton" class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-xl hover:bg-indigo-700">Start Chatting</button>
+            <!-- Guest Login Form -->
+            <div id="guestLoginForm" class="mt-6 space-y-4 hidden">
+                <input type="text" id="nicknameInput" class="w-full border rounded-md p-2.5 text-sm" placeholder="Your Nickname">
+                <input type="text" id="ownerIdInput" class="w-full border rounded-md p-2.5 text-sm" placeholder="Owner Short ID (optional)">
+                <button id="startChatButton" class="w-full bg-indigo-600 text-white py-3 rounded-xl shadow-md hover:bg-indigo-700 transition-colors duration-200">
+                    Start Chatting
+                </button>
+            </div>
         </div>
-      </div>
     </div>
+</div>
 
-  </div>
-
-  <!-- App logic -->
-  <script type="module" src="./app.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>
