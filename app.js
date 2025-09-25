@@ -1,13 +1,14 @@
 // app.js (module)
 // Replace the firebaseConfig below with your real config from the Firebase console
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "your-app.firebaseapp.com",
-  projectId: "your-app",
-  storageBucket: "your-app.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abc123"
-};
+    apiKey: "AIzaSyD_kzNCF-3fQZLxDujN_zUJlfJLErs0c0Q",
+    authDomain: "conversation-9949.firebaseapp.com",
+    projectId: "conversation-9949",
+    storageBucket: "conversation-9949.firebasestorage.app",
+    messagingSenderId: "370540129303",
+    appId: "1:370540129303:web:f153894431577ca14f8052",
+    measurementId: "G-166QC450CE"
+  };
 
 // Use a stable appId for your project's data paths (replace with your identifier)
 const appId = "default-app-id";
