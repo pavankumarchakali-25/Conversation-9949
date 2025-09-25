@@ -4,14 +4,14 @@ import { getFirestore, collection, addDoc, onSnapshot, query, where, orderBy, do
 
 // --- Firebase Config ---
 const firebaseConfig = {
-    apiKey: "AIzaSyD_kzNCF-3fQZLxDujN_zUJlfJLErs0c0Q",
-    authDomain: "conversation-9949.firebaseapp.com",
-    projectId: "conversation-9949",
-    storageBucket: "conversation-9949.firebasestorage.app",
-    messagingSenderId: "370540129303",
-    appId: "1:370540129303:web:f153894431577ca14f8052",
-    measurementId: "G-166QC450CE"
-  };
+  apiKey: "AIzaSyD_kzNCF-3fQZLxDujN_zUJlfJLErs0c0Q",
+  authDomain: "conversation-9949.firebaseapp.com",
+  projectId: "conversation-9949",
+  storageBucket: "conversation-9949.firebasestorage.app",
+  messagingSenderId: "370540129303",
+  appId: "1:370540129303:web:f153894431577ca14f8052",
+  measurementId: "G-166QC450CE"
+};
 
 // --- Initialize Firebase ---
 const app = initializeApp(firebaseConfig);
