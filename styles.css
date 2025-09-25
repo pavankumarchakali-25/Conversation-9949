@@ -29,3 +29,17 @@ body {
     border-bottom-left-radius: 0;
     margin-right: auto;
 }
+
+
+#chat-input textarea {
+    min-height: 48px;       /* ensures small default height */
+    max-height: 150px;      /* prevents it from growing too much */
+    overflow-y: auto;       /* scroll if too many lines */
+}
+
+/* Optional: nice focus effect */
+#chat-input textarea:focus {
+    border-color: #6366f1;  /* indigo-500 */
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.2);
+}
+
