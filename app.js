@@ -203,3 +203,7 @@ sendMessageButton.addEventListener('click',async ()=>{
 messageInput.addEventListener('keydown',e=>{
     if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendMessageButton.click(); }
 });
+messageInput.addEventListener('input', () => {
+    messageInput.style.height = 'auto';
+    messageInput.style.height = messageInput.scrollHeight + 'px';
+});
