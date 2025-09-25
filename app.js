@@ -4,13 +4,14 @@ import { getFirestore, collection, addDoc, onSnapshot, query, where, orderBy, do
 
 // --- Firebase Config ---
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
-};
+    apiKey: "AIzaSyD_kzNCF-3fQZLxDujN_zUJlfJLErs0c0Q",
+    authDomain: "conversation-9949.firebaseapp.com",
+    projectId: "conversation-9949",
+    storageBucket: "conversation-9949.firebasestorage.app",
+    messagingSenderId: "370540129303",
+    appId: "1:370540129303:web:f153894431577ca14f8052",
+    measurementId: "G-166QC450CE"
+  };
 
 // --- Initialize Firebase ---
 const app = initializeApp(firebaseConfig);
@@ -35,7 +36,7 @@ const ownerIdSpan = document.getElementById('ownerIdSpan');
 const conversationList = document.getElementById('conversationList');
 const chatHeader = document.getElementById('chat-header');
 const chatView = document.getElementById('chat-view');
-const chatPane = document.getElementById('chat-pane');
+const chatPane = document.getElementById('chat-pane'); 
 const messageInput = document.getElementById('messageInput');
 const sendMessageButton = document.getElementById('sendMessageButton');
 
@@ -69,26 +70,7 @@ function renderMessage(msg) {
     chatView.scrollTop = chatView.scrollHeight;
 }
 
-// --- Firestore Listeners ---
-async function getOrCreateConversation(ownerId, guestId) {
-    const convRef = collection(db, "conversations");
-    const q = query(convRef, where("participants", "array-contains", ownerId));
-    const snap = await getDocs(q);
-
-    for (let docSnap of snap.docs) {
-        const data = docSnap.data();
-        if (data.participants.includes(guestId)) {
-            return docSnap.ref;
-        }
-    }
-
-    return await addDoc(convRef, {
-        ownerId,
-        participants: [ownerId, guestId],
-        createdAt: serverTimestamp()
-    });
-}
-
+// --- Firebase Listeners ---
 const listenForMessages = (conversationId) => {
     if (unsubscribeMessages) unsubscribeMessages();
     const messagesRef = collection(db, `conversations/${conversationId}/messages`);
@@ -106,10 +88,10 @@ const listenForMessages = (conversationId) => {
 const listenForConversations = async () => {
     const convRef = collection(db, "conversations");
     const q = query(convRef, where("ownerId", "==", userId));
-    onSnapshot(q, async snapshot => {
+    onSnapshot(q, snapshot => {
         conversationList.innerHTML = "";
-        snapshot.forEach(async docSnap => {
-            const data = docSnap.data();
+        snapshot.forEach(async doc => {
+            const data = doc.data();
             const participantId = data.participants.find(id => id !== userId);
             let participantName = "Anonymous";
             if (participantId) {
@@ -119,15 +101,15 @@ const listenForConversations = async () => {
             const li = document.createElement("li");
             li.className = 'p-4 rounded-xl shadow-sm cursor-pointer hover:bg-gray-100 transition-colors duration-200 bg-white';
             li.textContent = participantName;
-            li.dataset.conversationId = docSnap.id;
+            li.dataset.conversationId = doc.id;
             li.addEventListener('click', () => {
                 Array.from(conversationList.children).forEach(item => item.classList.remove('bg-gray-200'));
                 li.classList.add('bg-gray-200');
-                activeConversationId = docSnap.id;
+                activeConversationId = doc.id;
                 chatHeader.querySelector('h3').textContent = `Chatting with ${participantName}`;
                 chatView.innerHTML = "";
-                chatPane.classList.remove('hidden');
                 listenForMessages(activeConversationId);
+                chatPane.classList.remove('hidden');
             });
             conversationList.appendChild(li);
         });
@@ -144,10 +126,11 @@ guestLoginBtn.addEventListener('click', () => {
     ownerLoginForm.classList.add('hidden');
 });
 
+// Owner login
 ownerLoginSubmit.addEventListener('click', async () => {
     const email = ownerEmail.value.trim();
     const password = ownerPassword.value.trim();
-    if (!email || !password) return alert("Enter email & password");
+    if (!email || !password) { alert("Enter email & password"); return; }
     try {
         const cred = await signInWithEmailAndPassword(auth, email, password);
         userId = cred.user.uid;
@@ -156,22 +139,30 @@ ownerLoginSubmit.addEventListener('click', async () => {
         mainUI.classList.remove('hidden');
         ownerIdSpan.textContent = userId;
         listenForConversations();
-    } catch (e) {
-        alert("Login failed: " + e.message);
-    }
+    } catch (e) { alert("Login failed: " + e.message); }
 });
 
+// Guest login (Owner ID optional)
 startChatButton.addEventListener('click', async () => {
     const nickname = nicknameInput.value.trim();
     const shortOwnerId = ownerIdInput.value.trim();
-    if (!nickname) return alert("Enter nickname");
-    if (!shortOwnerId) return alert("Enter the Owner ID");
 
-    // Lookup owner full UID from appConfig
-    const ownerQuery = query(collection(db, "appConfig"), where("shortId", "==", shortOwnerId));
-    const snap = await getDocs(ownerQuery);
-    if (snap.empty) return alert("Owner not found");
-    ownerId = snap.docs[0].data().fullUid;
+    if (!nickname) { alert("Enter nickname"); return; }
+
+    let ownerUid = null;
+    if (shortOwnerId) {
+        const ownerQuery = query(collection(db, "appConfig"), where("shortId", "==", shortOwnerId));
+        const snap = await getDocs(ownerQuery);
+        if (!snap.empty) { ownerUid = snap.docs[0].data().fullUid; } 
+        else { alert("Owner not found"); return; }
+    } else {
+        const ownerQuery = collection(db, "appConfig");
+        const snap = await getDocs(ownerQuery);
+        if (!snap.empty) { ownerUid = snap.docs[0].data().fullUid; } 
+        else { alert("No owner available"); return; }
+    }
+
+    ownerId = ownerUid;
     userName = nickname;
 
     await signInAnonymously(auth);
@@ -179,9 +170,15 @@ startChatButton.addEventListener('click', async () => {
 
     await setDoc(doc(db, "users", userId), { name: nickname });
 
-    const convDocRef = await getOrCreateConversation(ownerId, userId);
-    activeConversationId = convDocRef.id;
+    const convRef = collection(db, "conversations");
+    const q = query(convRef, where("participants", "array-contains", ownerId), where("participants", "array-contains", userId));
+    const convSnap = await getDocs(q);
+    let convDoc;
 
+    if (!convSnap.empty) convDoc = convSnap.docs[0].ref;
+    else convDoc = await addDoc(convRef, { ownerId, participants: [ownerId, userId], createdAt: serverTimestamp() });
+
+    activeConversationId = convDoc.id;
     setupModal.classList.add('hidden');
     mainUI.classList.remove('hidden');
     chatPane.classList.remove('hidden');
@@ -191,32 +188,16 @@ startChatButton.addEventListener('click', async () => {
     listenForMessages(activeConversationId);
 });
 
+// Send message
 sendMessageButton.addEventListener('click', async () => {
     const text = messageInput.value.trim();
     if (!text || !activeConversationId) return;
     const messagesRef = collection(db, `conversations/${activeConversationId}/messages`);
-    await addDoc(messagesRef, {
-        senderId: userId,
-        text,
-        timestamp: serverTimestamp(),
-        senderName: userName || ""
-    });
+    await addDoc(messagesRef, { senderId: userId, text, timestamp: serverTimestamp(), senderName: userName || "" });
     messageInput.value = "";
 });
+messageInput.addEventListener('keydown', e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessageButton.click(); } });
+messageInput.addEventListener('input', () => { messageInput.style.height = 'auto'; messageInput.style.height = messageInput.scrollHeight + 'px'; });
 
-messageInput.addEventListener('keydown', e => {
-    if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendMessageButton.click();
-    }
-});
-
-messageInput.addEventListener('input', () => {
-    messageInput.style.height = 'auto';
-    messageInput.style.height = messageInput.scrollHeight + 'px';
-});
-
-// --- Init ---
-onAuthStateChanged(auth, user => {
-    if (user) userId = user.uid;
-});
+// Initial Auth State
+onAuthStateChanged(auth, user => { if (user) { userId = user.uid; } });
