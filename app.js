@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInAnonymously, signInWithEmailAndPassword, onAuthStateChanged, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, onSnapshot, query, where, orderBy, doc, getDoc, setDoc, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, onSnapshot, query, where, orderBy, doc, setDoc, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-// --- Firebase Config ---
+// Firebase config
 const firebaseConfig = {
     apiKey: "AIzaSyD_kzNCF-3fQZLxDujN_zUJlfJLErs0c0Q",
     authDomain: "conversation-9949.firebaseapp.com",
@@ -13,151 +13,140 @@ const firebaseConfig = {
     measurementId: "G-166QC450CE"
   };
 
-// --- Firebase Init ---
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
 const auth = getAuth(app);
 setPersistence(auth, browserSessionPersistence);
+const db = getFirestore(app);
 
-// --- DOM Elements ---
-const setupModal = document.getElementById('setup-modal');
-const ownerLoginBtn = document.getElementById('ownerLoginBtn');
-const guestLoginBtn = document.getElementById('guestLoginBtn');
-const ownerLoginForm = document.getElementById('ownerLoginForm');
-const ownerLoginSubmit = document.getElementById('ownerLoginSubmit');
-const ownerEmail = document.getElementById('ownerEmail');
-const ownerPassword = document.getElementById('ownerPassword');
-const guestLoginForm = document.getElementById('guestLoginForm');
-const nicknameInput = document.getElementById('nicknameInput');
-const startChatButton = document.getElementById('startChatButton');
-const mainUI = document.getElementById('main-ui');
-const ownerIdSpan = document.getElementById('ownerIdSpan');
-const conversationList = document.getElementById('conversationList');
-const chatHeader = document.getElementById('chat-header');
-const chatView = document.getElementById('chat-view');
-const chatPane = document.getElementById('chat-pane');
-const messageInput = document.getElementById('messageInput');
-const sendMessageButton = document.getElementById('sendMessageButton');
+// DOM Elements
+const loginModal = document.getElementById("login-modal");
+const ownerBtn = document.getElementById("owner-btn");
+const guestBtn = document.getElementById("guest-btn");
+const ownerForm = document.getElementById("owner-form");
+const guestForm = document.getElementById("guest-form");
+const ownerEmail = document.getElementById("owner-email");
+const ownerPassword = document.getElementById("owner-password");
+const ownerLogin = document.getElementById("owner-login");
+const guestNickname = document.getElementById("guest-nickname");
+const guestStart = document.getElementById("guest-start");
 
-// --- State ---
+const chatUI = document.getElementById("chat-ui");
+const chatView = document.getElementById("chat-view");
+const messageInput = document.getElementById("message-input");
+const sendMessage = document.getElementById("send-message");
+
+// State
 let userId = null;
 let userName = null;
 let isOwner = false;
 let activeConversationId = null;
 let unsubscribeMessages = null;
 
-// --- Functions ---
-function renderMessage(msg) {
-    const bubble = document.createElement("div");
-    bubble.className = `message-bubble ${msg.senderId === userId ? 'sent' : 'received'}`;
-    bubble.innerHTML = `<p class="font-bold text-sm">${msg.senderName || (msg.senderId===userId ? "Me":"Anonymous")}</p>
-                        <p>${msg.text}</p>`;
-    chatView.appendChild(bubble);
-    chatView.scrollTop = chatView.scrollHeight;
-}
+// Show forms
+ownerBtn.onclick = () => { ownerForm.classList.remove("hidden"); guestForm.classList.add("hidden"); };
+guestBtn.onclick = () => { guestForm.classList.remove("hidden"); ownerForm.classList.add("hidden"); };
 
-function listenForMessages(conversationId) {
-    if (unsubscribeMessages) unsubscribeMessages();
-    const messagesRef = collection(db, `conversations/${conversationId}/messages`);
-    const q = query(messagesRef, orderBy("timestamp", "asc"));
-    unsubscribeMessages = onSnapshot(q, snapshot => {
-        chatView.innerHTML = "";
-        snapshot.forEach(doc => renderMessage(doc.data()));
-    });
-}
-
-function listenForConversations() {
-    const convRef = collection(db, "conversations");
-    const q = query(convRef, where("ownerId", "==", userId));
-    onSnapshot(q, snapshot => {
-        conversationList.innerHTML = "";
-        snapshot.forEach(docSnap => {
-            const data = docSnap.data();
-            const participantId = data.participants.find(id => id !== userId);
-            const li = document.createElement("li");
-            li.textContent = participantId || "Anonymous";
-            li.className = "p-2 cursor-pointer bg-white mb-1 rounded";
-            li.addEventListener('click', () => {
-                activeConversationId = docSnap.id;
-                chatHeader.querySelector('h3').textContent = `Chatting with ${participantId}`;
-                chatPane.classList.remove('hidden');
-                listenForMessages(activeConversationId);
-            });
-            conversationList.appendChild(li);
-        });
-    });
-}
-
-// --- Event Listeners ---
-ownerLoginBtn.addEventListener('click', () => {
-    ownerLoginForm.classList.remove('hidden');
-    guestLoginForm.classList.add('hidden');
-});
-guestLoginBtn.addEventListener('click', () => {
-    guestLoginForm.classList.remove('hidden');
-    ownerLoginForm.classList.add('hidden');
-});
-
-// Owner Login
-ownerLoginSubmit.addEventListener('click', async () => {
+// Owner login
+ownerLogin.onclick = async () => {
     const email = ownerEmail.value.trim();
     const password = ownerPassword.value.trim();
     if (!email || !password) return alert("Enter email & password");
     try {
         const cred = await signInWithEmailAndPassword(auth, email, password);
+        const ownerRef = doc(db, "appConfig", "owner");
+        const snap = await getDocs(collection(db, "appConfig"));
+        const existingOwner = snap.docs.find(d => d.id === "owner");
+        if (existingOwner && existingOwner.data().uid !== cred.user.uid) {
+            return alert("Owner already exists. Login as guest.");
+        }
+        await setDoc(ownerRef, { uid: cred.user.uid });
         userId = cred.user.uid;
+        userName = "Owner";
         isOwner = true;
-        setupModal.classList.add('hidden');
-        mainUI.classList.remove('hidden');
-        listenForConversations();
-    } catch(e) {
-        alert("Login failed. Only the first owner allowed.");
-    }
-});
+        loginModal.classList.add("hidden");
+        chatUI.classList.remove("hidden");
+        loadConversations();
+    } catch (e) { alert(e.message); }
+};
 
-// Anonymous Chat
-startChatButton.addEventListener('click', async () => {
-    const nickname = nicknameInput.value.trim();
+// Guest login
+guestStart.onclick = async () => {
+    const nickname = guestNickname.value.trim();
     if (!nickname) return alert("Enter nickname");
-    await signInAnonymously(auth);
-    userId = auth.currentUser.uid;
+    const anon = await signInAnonymously(auth);
+    userId = anon.user.uid;
     userName = nickname;
+    loginModal.classList.add("hidden");
+    chatUI.classList.remove("hidden");
+    startGuestConversation();
+};
 
-    // Save profile
-    await setDoc(doc(db, "users", userId), { name: nickname });
-
-    // Create conversation with owner
+// --- Load conversations for owner ---
+async function loadConversations() {
     const convRef = collection(db, "conversations");
     const q = query(convRef, where("participants", "array-contains", userId));
-    const convSnap = await getDocs(q);
+    onSnapshot(q, snapshot => {
+        chatView.innerHTML = "";
+        snapshot.forEach(docSnap => {
+            const conv = docSnap.data();
+            if (!conv.participants.includes(userId)) return;
+            const participant = conv.participants.find(p => p !== userId);
+            const div = document.createElement("div");
+            div.textContent = `Chat with ${participant}`;
+            div.className = "conversation-item";
+            div.onclick = () => listenMessages(docSnap.id);
+            chatView.appendChild(div);
+        });
+    });
+}
 
-    let convDoc;
-    if (!convSnap.empty) convDoc = convSnap.docs[0].ref;
-    else convDoc = await addDoc(convRef, { ownerId: "OWNER_UID", participants: ["OWNER_UID", userId], createdAt: serverTimestamp() });
+// --- Guest conversation ---
+async function startGuestConversation() {
+    // Get owner
+    const ownerSnap = await getDocs(collection(db, "appConfig"));
+    const owner = ownerSnap.docs.find(d => d.id === "owner");
+    if (!owner) return alert("Owner not found");
+    const ownerId = owner.data().uid;
 
-    activeConversationId = convDoc.id;
-    setupModal.classList.add('hidden');
-    mainUI.classList.remove('hidden');
-    chatPane.classList.remove('hidden');
-    listenForMessages(activeConversationId);
-});
+    // Get or create conversation
+    const convRef = collection(db, "conversations");
+    const q = query(convRef, where("participants", "array-contains", ownerId));
+    const snap = await getDocs(q);
+    if (!snap.empty) activeConversationId = snap.docs[0].id;
+    else {
+        const docRef = await addDoc(convRef, { participants: [ownerId, userId], createdAt: serverTimestamp() });
+        activeConversationId = docRef.id;
+    }
+    listenMessages(activeConversationId);
+}
 
-// Send Message
-sendMessageButton.addEventListener('click', async () => {
-    const text = messageInput.value.trim();
-    if (!text || !activeConversationId) return;
+// --- Listen for messages ---
+function listenMessages(convId) {
+    if (unsubscribeMessages) unsubscribeMessages();
+    const msgRef = collection(db, `conversations/${convId}/messages`);
+    const q = query(msgRef, orderBy("timestamp", "asc"));
+    unsubscribeMessages = onSnapshot(q, snapshot => {
+        chatView.innerHTML = "";
+        snapshot.forEach(docSnap => {
+            const msg = docSnap.data();
+            const div = document.createElement("div");
+            div.className = `message-bubble ${msg.senderId === userId ? "sent" : "received"}`;
+            div.innerHTML = `<p>${msg.senderName || "Anonymous"}</p><p>${msg.text}</p>`;
+            chatView.appendChild(div);
+        });
+        chatView.scrollTop = chatView.scrollHeight;
+    });
+}
+
+// --- Send message ---
+sendMessage.onclick = async () => {
+    if (!messageInput.value || !activeConversationId) return;
     await addDoc(collection(db, `conversations/${activeConversationId}/messages`), {
         senderId: userId,
         senderName: userName,
-        text,
+        text: messageInput.value,
         timestamp: serverTimestamp()
     });
     messageInput.value = "";
-});
-
-messageInput.addEventListener('keydown', e => {
-    if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendMessageButton.click();
-    }
-});
+};
+messageInput.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage.click(); } });
