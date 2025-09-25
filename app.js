@@ -36,6 +36,7 @@ const ownerIdSpan = document.getElementById('ownerIdSpan');
 const conversationList = document.getElementById('conversationList');
 const chatHeader = document.getElementById('chat-header');
 const chatView = document.getElementById('chat-view');
+const chatPane = document.getElementById('chat-pane'); // ADDED: Reference to the chat pane container
 const messageInput = document.getElementById('messageInput');
 const sendMessageButton = document.getElementById('sendMessageButton');
 
@@ -117,6 +118,7 @@ const listenForConversations = async () => {
                 chatHeader.querySelector('h3').textContent=`Chatting with ${participantName}`;
                 chatView.innerHTML="";
                 listenForMessages(activeConversationId);
+                chatPane.classList.remove('hidden'); // ADDED: Show chat pane when a conversation is selected
             });
             conversationList.appendChild(li);
         });
@@ -146,6 +148,7 @@ ownerLoginSubmit.addEventListener('click', async ()=>{
         mainUI.classList.remove('hidden');
         ownerIdSpan.textContent = userId;
         listenForConversations();
+        // NOTE: The chat pane remains hidden until the owner selects a conversation.
     }catch(e){ alert("Login failed: "+e.message); }
 });
 
@@ -173,6 +176,8 @@ startChatButton.addEventListener('click',async ()=>{
     const snap = await getDocs(q);
     let convDoc;
     if(!snap.empty){
+        // This logic is flawed (as noted previously), but functional for now:
+        // It takes the first conversation where the owner is a participant.
         convDoc = snap.docs[0].ref;
     }else{
         convDoc = await addDoc(convRef,{
@@ -184,6 +189,7 @@ startChatButton.addEventListener('click',async ()=>{
     activeConversationId = convDoc.id;
     setupModal.classList.add('hidden');
     mainUI.classList.remove('hidden');
+    chatPane.classList.remove('hidden'); // ADDED: Show chat pane immediately for guest
     chatHeader.querySelector('h3').textContent = `Chatting with the Owner`;
     // Load local messages first
     const localMsgs = loadMessagesLocally(activeConversationId);
