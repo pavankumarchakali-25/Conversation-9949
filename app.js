@@ -36,7 +36,7 @@ const ownerIdSpan = document.getElementById('ownerIdSpan');
 const conversationList = document.getElementById('conversationList');
 const chatHeader = document.getElementById('chat-header');
 const chatView = document.getElementById('chat-view');
-const chatPane = document.getElementById('chat-pane'); 
+const chatPane = document.getElementById('chat-pane');
 const messageInput = document.getElementById('messageInput');
 const sendMessageButton = document.getElementById('sendMessageButton');
 
@@ -48,7 +48,7 @@ let isOwner = false;
 let activeConversationId = null;
 let unsubscribeMessages = null;
 
-// --- Utility Functions ---
+// --- Local Storage Functions ---
 function saveMessageLocally(conversationId, message) {
     const key = `chat_${conversationId}`;
     const existing = JSON.parse(localStorage.getItem(key)) || [];
@@ -61,6 +61,7 @@ function loadMessagesLocally(conversationId) {
     return JSON.parse(localStorage.getItem(key)) || [];
 }
 
+// --- Message Rendering ---
 function renderMessage(msg) {
     const bubble = document.createElement("div");
     bubble.className = `message-bubble rounded-xl p-3 max-w-[70%] shadow-sm ${msg.senderId === userId ? "sent" : "received"}`;
@@ -71,27 +72,27 @@ function renderMessage(msg) {
 }
 
 // --- Firebase Listeners ---
-const listenForMessages = (conversationId) => {
+function listenForMessages(conversationId) {
     if (unsubscribeMessages) unsubscribeMessages();
     const messagesRef = collection(db, `conversations/${conversationId}/messages`);
     const q = query(messagesRef, orderBy("timestamp", "asc"));
     unsubscribeMessages = onSnapshot(q, snapshot => {
         chatView.innerHTML = "";
-        snapshot.forEach(doc => {
-            const msg = doc.data();
+        snapshot.forEach(docSnap => {
+            const msg = docSnap.data();
             renderMessage(msg);
             if (!isOwner) saveMessageLocally(conversationId, msg);
         });
     });
-};
+}
 
-const listenForConversations = async () => {
+async function listenForConversations() {
     const convRef = collection(db, "conversations");
     const q = query(convRef, where("ownerId", "==", userId));
     onSnapshot(q, snapshot => {
         conversationList.innerHTML = "";
-        snapshot.forEach(async doc => {
-            const data = doc.data();
+        snapshot.forEach(async docSnap => {
+            const data = docSnap.data();
             const participantId = data.participants.find(id => id !== userId);
             let participantName = "Anonymous";
             if (participantId) {
@@ -101,11 +102,11 @@ const listenForConversations = async () => {
             const li = document.createElement("li");
             li.className = 'p-4 rounded-xl shadow-sm cursor-pointer hover:bg-gray-100 transition-colors duration-200 bg-white';
             li.textContent = participantName;
-            li.dataset.conversationId = doc.id;
+            li.dataset.conversationId = docSnap.id;
             li.addEventListener('click', () => {
                 Array.from(conversationList.children).forEach(item => item.classList.remove('bg-gray-200'));
                 li.classList.add('bg-gray-200');
-                activeConversationId = doc.id;
+                activeConversationId = docSnap.id;
                 chatHeader.querySelector('h3').textContent = `Chatting with ${participantName}`;
                 chatView.innerHTML = "";
                 listenForMessages(activeConversationId);
@@ -114,9 +115,10 @@ const listenForConversations = async () => {
             conversationList.appendChild(li);
         });
     });
-};
+}
 
 // --- Event Listeners ---
+// Toggle forms
 ownerLoginBtn.addEventListener('click', () => {
     ownerLoginForm.classList.remove('hidden');
     guestLoginForm.classList.add('hidden');
@@ -130,62 +132,89 @@ guestLoginBtn.addEventListener('click', () => {
 ownerLoginSubmit.addEventListener('click', async () => {
     const email = ownerEmail.value.trim();
     const password = ownerPassword.value.trim();
-    if (!email || !password) { alert("Enter email & password"); return; }
+    if (!email || !password) return alert("Enter email & password");
+
+    const ownerRef = doc(db, "appConfig", "owner");
+    const ownerDoc = await getDoc(ownerRef);
+
     try {
-        const cred = await signInWithEmailAndPassword(auth, email, password);
-        userId = cred.user.uid;
-        isOwner = true;
+        if (!ownerDoc.exists()) {
+            // First owner
+            const cred = await signInWithEmailAndPassword(auth, email, password);
+            userId = cred.user.uid;
+            isOwner = true;
+            await setDoc(ownerRef, { ownerUid: userId, ownerEmail: email });
+        } else {
+            const storedEmail = ownerDoc.data().ownerEmail;
+            if (email !== storedEmail) return alert("Owner exists. Login anonymously.");
+            const cred = await signInWithEmailAndPassword(auth, email, password);
+            userId = cred.user.uid;
+            isOwner = true;
+        }
+
         setupModal.classList.add('hidden');
         mainUI.classList.remove('hidden');
         ownerIdSpan.textContent = userId;
         listenForConversations();
-    } catch (e) { alert("Login failed: " + e.message); }
+
+    } catch (err) {
+        console.error(err);
+        alert("Login failed: " + err.message);
+    }
 });
 
-// Guest login (Owner ID optional)
+// Guest login
 startChatButton.addEventListener('click', async () => {
     const nickname = nicknameInput.value.trim();
-    const shortOwnerId = ownerIdInput.value.trim();
+    if (!nickname) return alert("Enter nickname");
 
-    if (!nickname) { alert("Enter nickname"); return; }
+    try {
+        // Sign in anonymously
+        await signInAnonymously(auth);
+        userId = auth.currentUser.uid;
+        userName = nickname;
 
-    let ownerUid = null;
-    if (shortOwnerId) {
-        const ownerQuery = query(collection(db, "appConfig"), where("shortId", "==", shortOwnerId));
-        const snap = await getDocs(ownerQuery);
-        if (!snap.empty) { ownerUid = snap.docs[0].data().fullUid; } 
-        else { alert("Owner not found"); return; }
-    } else {
-        const ownerQuery = collection(db, "appConfig");
-        const snap = await getDocs(ownerQuery);
-        if (!snap.empty) { ownerUid = snap.docs[0].data().fullUid; } 
-        else { alert("No owner available"); return; }
+        // Save user profile
+        await setDoc(doc(db, "users", userId), { name: nickname });
+
+        // Get or create conversation with owner
+        const ownerRef = doc(db, "appConfig", "owner");
+        const ownerDoc = await getDoc(ownerRef);
+        if (!ownerDoc.exists()) return alert("No owner exists yet");
+        ownerId = ownerDoc.data().ownerUid;
+
+        const convRef = collection(db, "conversations");
+        const q = query(convRef, where("participants", "array-contains", ownerId));
+        const convSnap = await getDocs(q);
+
+        let convDoc = null;
+        convSnap.forEach(docSnap => {
+            const data = docSnap.data();
+            if (data.participants.includes(userId)) convDoc = docSnap.ref;
+        });
+
+        if (!convDoc) {
+            convDoc = await addDoc(convRef, {
+                ownerId,
+                participants: [ownerId, userId],
+                createdAt: serverTimestamp()
+            });
+        }
+
+        activeConversationId = convDoc.id;
+
+        setupModal.classList.add('hidden');
+        mainUI.classList.remove('hidden');
+        chatPane.classList.remove('hidden');
+        chatHeader.querySelector('h3').textContent = `Chatting with the Owner`;
+
+        loadMessagesLocally(activeConversationId).forEach(renderMessage);
+        listenForMessages(activeConversationId);
+
+    } catch (err) {
+        console.error(err);
+        alert("Failed to start chat: " + err.message);
     }
-
-    ownerId = ownerUid;
-    userName = nickname;
-
-    await signInAnonymously(auth);
-    userId = auth.currentUser.uid;
-
-    await setDoc(doc(db, "users", userId), { name: nickname });
-
-    const convRef = collection(db, "conversations");
-    const q = query(convRef, where("participants", "array-contains", ownerId), where("participants", "array-contains", userId));
-    const convSnap = await getDocs(q);
-    let convDoc;
-
-    if (!convSnap.empty) convDoc = convSnap.docs[0].ref;
-    else convDoc = await addDoc(convRef, { ownerId, participants: [ownerId, userId], createdAt: serverTimestamp() });
-
-    activeConversationId = convDoc.id;
-    setupModal.classList.add('hidden');
-    mainUI.classList.remove('hidden');
-    chatPane.classList.remove('hidden');
-    chatHeader.querySelector('h3').textContent = `Chatting with the Owner`;
-
-    loadMessagesLocally(activeConversationId).forEach(renderMessage);
-    listenForMessages(activeConversationId);
 });
 
 // Send message
@@ -193,11 +222,22 @@ sendMessageButton.addEventListener('click', async () => {
     const text = messageInput.value.trim();
     if (!text || !activeConversationId) return;
     const messagesRef = collection(db, `conversations/${activeConversationId}/messages`);
-    await addDoc(messagesRef, { senderId: userId, text, timestamp: serverTimestamp(), senderName: userName || "" });
+    await addDoc(messagesRef, {
+        senderId: userId,
+        text,
+        timestamp: serverTimestamp(),
+        senderName: userName || ""
+    });
     messageInput.value = "";
 });
-messageInput.addEventListener('keydown', e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessageButton.click(); } });
-messageInput.addEventListener('input', () => { messageInput.style.height = 'auto'; messageInput.style.height = messageInput.scrollHeight + 'px'; });
 
-// Initial Auth State
-onAuthStateChanged(auth, user => { if (user) { userId = user.uid; } });
+messageInput.addEventListener('keydown', e => {
+    if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendMessageButton.click();
+    }
+});
+messageInput.addEventListener('input', () => {
+    messageInput.style.height = 'auto';
+    messageInput.style.height = messageInput.scrollHeight + 'px';
+});
