@@ -3,47 +3,248 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Firebase Chat App</title>
-  <link rel="stylesheet" href="styles.css">
+  <title>Live Chat App</title>
+  <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
+  <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
+  <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; margin: 0; background:#f0f2f5; }
+    .hidden { display:none; }
+    .modal, .chat-container { background:white; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.15); padding:20px; }
+    .modal { position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:300px; }
+    input, button, textarea { width:100%; margin-top:10px; padding:10px; border-radius:6px; border:1px solid #ccc; font-size:14px; }
+    button { background:#4f46e5; color:white; border:none; cursor:pointer; }
+    button:hover { background:#4338ca; }
+    .chat-container { max-width:900px; margin:50px auto; display:flex; flex-direction:row; height:80vh; }
+    .conversations { width:30%; border-right:1px solid #ddd; overflow-y:auto; padding-right:10px; }
+    .conversations li { padding:10px; cursor:pointer; list-style:none; border-radius:6px; margin-bottom:5px; background:#f9f9f9; }
+    .conversations li.active { background:#4f46e5; color:white; }
+    .chat-pane { flex:1; display:flex; flex-direction:column; }
+    .messages { flex:1; overflow-y:auto; padding:10px; display:flex; flex-direction:column; gap:8px; }
+    .message { padding:8px 12px; border-radius:15px; max-width:70%; }
+    .message.sent { background:#4f46e5; color:white; align-self:flex-end; }
+    .message.received { background:#e5e7eb; align-self:flex-start; color:#111; }
+    .input-area { display:flex; gap:10px; margin-top:10px; }
+    .input-area textarea { flex:1; resize:none; }
+  </style>
 </head>
 <body>
-  <!-- Login Modal -->
-  <div id="login-modal" class="modal">
-    <div class="modal-content">
-      <h2>Welcome</h2>
-      <div class="login-buttons">
-        <button id="owner-btn">Owner Login</button>
-        <button id="guest-btn">Anonymous Chat</button>
-      </div>
 
-      <!-- Owner Login Form -->
-      <form id="owner-form" class="hidden">
-        <input type="email" id="owner-email" placeholder="Email">
-        <input type="password" id="owner-password" placeholder="Password">
-        <button type="button" id="owner-login">Login</button>
-      </form>
+  <div id="setup-modal" class="modal">
+    <h2>Welcome</h2>
+    <button id="ownerBtn">Owner Login</button>
+    <button id="guestBtn">Anonymous Chat</button>
 
-      <!-- Guest Login Form -->
-      <form id="guest-form" class="hidden">
-        <input type="text" id="guest-nickname" placeholder="Your Nickname">
-        <button type="button" id="guest-start">Start Chat</button>
-      </form>
-    </div>
+    <form id="ownerForm" class="hidden">
+      <input type="email" id="ownerEmail" placeholder="Email">
+      <input type="password" id="ownerPassword" placeholder="Password">
+      <button type="submit">Login</button>
+    </form>
+
+    <form id="guestForm" class="hidden">
+      <input type="text" id="guestName" placeholder="Your Nickname">
+      <button type="submit">Start Chat</button>
+    </form>
   </div>
 
-  <!-- Chat UI -->
-  <div id="chat-ui" class="hidden">
-    <div id="conversation-list" class="conversation-list"></div>
-    <div id="chat-pane" class="chat-pane">
-      <div id="chat-header">Chat</div>
-      <div id="chat-view" class="chat-view"></div>
-      <div class="chat-input">
-        <textarea id="message-input" placeholder="Type a message"></textarea>
-        <button id="send-message">Send</button>
+  <div id="chat-ui" class="chat-container hidden">
+    <ul id="conversationList" class="conversations"></ul>
+    <div class="chat-pane">
+      <h3 id="chatHeader">Chat</h3>
+      <div id="chatView" class="messages"></div>
+      <div class="input-area">
+        <textarea id="messageInput" rows="1" placeholder="Type a message"></textarea>
+        <button id="sendBtn">Send</button>
       </div>
     </div>
   </div>
 
-  <script type="module" src="app.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, collection, addDoc, doc, getDoc, setDoc, query, where, orderBy, onSnapshot, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyD_kzNCF-3fQZLxDujN_zUJlfJLErs0c0Q",
+    authDomain: "conversation-9949.firebaseapp.com",
+    projectId: "conversation-9949",
+    storageBucket: "conversation-9949.firebasestorage.app",
+    messagingSenderId: "370540129303",
+    appId: "1:370540129303:web:f153894431577ca14f8052",
+    measurementId: "G-166QC450CE"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+let currentUserId = null;
+let isOwner = false;
+let activeConversationId = null;
+let unsubscribeMessages = null;
+
+// DOM references
+const setupModal = document.getElementById('setup-modal');
+const ownerBtn = document.getElementById('ownerBtn');
+const guestBtn = document.getElementById('guestBtn');
+const ownerForm = document.getElementById('ownerForm');
+const guestForm = document.getElementById('guestForm');
+const ownerEmail = document.getElementById('ownerEmail');
+const ownerPassword = document.getElementById('ownerPassword');
+const guestName = document.getElementById('guestName');
+const chatUI = document.getElementById('chat-ui');
+const conversationList = document.getElementById('conversationList');
+const chatHeader = document.getElementById('chatHeader');
+const chatView = document.getElementById('chatView');
+const messageInput = document.getElementById('messageInput');
+const sendBtn = document.getElementById('sendBtn');
+
+// Owner login toggle
+ownerBtn.addEventListener('click', () => {
+    ownerForm.classList.remove('hidden');
+    guestForm.classList.add('hidden');
+});
+
+// Guest login toggle
+guestBtn.addEventListener('click', () => {
+    guestForm.classList.remove('hidden');
+    ownerForm.classList.add('hidden');
+});
+
+// Utility
+function renderMessage(msg) {
+    const div = document.createElement('div');
+    div.className = 'message ' + (msg.senderId===currentUserId ? 'sent':'received');
+    div.textContent = msg.senderName + ': ' + msg.text;
+    chatView.appendChild(div);
+    chatView.scrollTop = chatView.scrollHeight;
+}
+
+function saveLocal(convoId,msg){
+    const key = 'chat_'+convoId;
+    const existing = JSON.parse(localStorage.getItem(key))||[];
+    existing.push(msg);
+    localStorage.setItem(key, JSON.stringify(existing));
+}
+
+function loadLocal(convoId){
+    const key = 'chat_'+convoId;
+    return JSON.parse(localStorage.getItem(key))||[];
+}
+
+// Owner login
+ownerForm.addEventListener('submit', async(e)=>{
+    e.preventDefault();
+    const email = ownerEmail.value.trim();
+    const password = ownerPassword.value.trim();
+    if(!email || !password) return alert("Enter both fields");
+    try{
+        const cred = await signInWithEmailAndPassword(auth,email,password);
+        currentUserId = cred.user.uid;
+
+        // Check if owner already exists
+        const ownerDoc = await getDoc(doc(db,'appConfig','owner'));
+        if(ownerDoc.exists() && ownerDoc.data().uid !== currentUserId){
+            alert("Owner already registered. Login as guest instead.");
+            return;
+        }
+        if(!ownerDoc.exists()){
+            await setDoc(doc(db,'appConfig','owner'),{uid:currentUserId});
+        }
+        isOwner=true;
+        setupModal.classList.add('hidden');
+        chatUI.classList.remove('hidden');
+        listenConversations();
+    }catch(err){ alert(err.message);}
+});
+
+// Guest login
+guestForm.addEventListener('submit', async(e)=>{
+    e.preventDefault();
+    const name = guestName.value.trim();
+    if(!name) return alert("Enter nickname");
+    await signInAnonymously(auth);
+    currentUserId = auth.currentUser.uid;
+
+    await setDoc(doc(db,'users',currentUserId),{name});
+    setupModal.classList.add('hidden');
+    chatUI.classList.remove('hidden');
+
+    // Create/get conversation with owner
+    const ownerDoc = await getDoc(doc(db,'appConfig','owner'));
+    if(!ownerDoc.exists()) return alert("Owner not registered yet.");
+    const ownerId = ownerDoc.data().uid;
+
+    const convQuery = query(collection(db,'conversations'),where('participants','array-contains',ownerId));
+    const snap = await getDocs(convQuery);
+    let convoId=null;
+    if(!snap.empty){
+        convoId = snap.docs[0].id;
+    }else{
+        const docRef = await addDoc(collection(db,'conversations'),{
+            participants:[ownerId,currentUserId],
+            createdAt:serverTimestamp()
+        });
+        convoId = docRef.id;
+    }
+    activeConversationId = convoId;
+
+    // Load local messages
+    loadLocal(activeConversationId).forEach(renderMessage);
+
+    listenMessages(activeConversationId);
+});
+
+// Listen messages
+function listenMessages(convoId){
+    if(unsubscribeMessages) unsubscribeMessages();
+    const messagesRef = collection(db,'conversations',convoId,'messages');
+    const q = query(messagesRef,orderBy('timestamp','asc'));
+    unsubscribeMessages = onSnapshot(q,snap=>{
+        chatView.innerHTML='';
+        snap.forEach(doc=>{
+            const msg = doc.data();
+            renderMessage(msg);
+            if(!isOwner) saveLocal(convoId,msg);
+        });
+    });
+}
+
+// Send message
+sendBtn.addEventListener('click',async()=>{
+    const text = messageInput.value.trim();
+    if(!text || !activeConversationId) return;
+    const ownerDoc = await getDoc(doc(db,'appConfig','owner'));
+    const ownerId = ownerDoc.data().uid;
+    await addDoc(collection(db,'conversations',activeConversationId,'messages'),{
+        senderId:currentUserId,
+        senderName:isOwner?'Owner':guestName.value||'Guest',
+        text,
+        timestamp:serverTimestamp()
+    });
+    messageInput.value='';
+});
+
+function listenConversations(){
+    const convRef = collection(db,'conversations');
+    onSnapshot(convRef,snap=>{
+        conversationList.innerHTML='';
+        snap.forEach(docSnap=>{
+            const data = docSnap.data();
+            if(data.participants.includes(currentUserId)){
+                const li = document.createElement('li');
+                li.textContent='Chat with '+data.participants.find(id=>id!==currentUserId);
+                li.addEventListener('click',()=>{
+                    activeConversationId = docSnap.id;
+                    chatHeader.textContent='Chatting with user';
+                    listenMessages(activeConversationId);
+                });
+                conversationList.appendChild(li);
+            }
+        });
+    });
+}
+</script>
+
 </body>
 </html>
